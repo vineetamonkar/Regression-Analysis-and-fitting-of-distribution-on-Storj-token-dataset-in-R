@@ -1,0 +1,65 @@
+---
+title: "CS6313.002 Statistical Project 1"
+author: Ruolan Zeng(rxz171630), Vineet Vilas Amonkar(vva180000), Aakash Kamlesh Punjabi(
+  akp170430)
+date: "October 24, 2018"
+output: html_document
+---
+## Alternate method
+
+Loading the token data:
+
+
+```{r}
+tokenData <- read.delim("networkstorjTX.txt", header = FALSE, sep = " ")
+tokenFrame<- as.data.frame(tokenData)
+colnames(tokenFrame)<-c('fromNode','toNode','unixTime','totalAmount')
+head(tokenFrame)
+```
+
+Removing Outliers from the token data:
+
+
+```{r}
+TotalSupply <- 424999998
+Decimals <- 10^8
+OutlierValue <- TotalSupply*Decimals
+WithoutOutlierdata <- tokenFrame[ which(tokenFrame$totalAmount < OutlierValue),]
+head(WithoutOutlierdata)
+
+
+```
+
+Summary of the token data without outlier:
+
+```{r}
+summary(WithoutOutlierdata$totalAmount)
+
+```
+
+Max amount of the token data without outlier:
+
+```{r}
+max(WithoutOutlierdata$totalAmount)
+```
+
+First step: Ensure that the Storj token data is within the time frame of the Price Data
+
+Following is the date interval of the price data:
+
+Start Date: 07/02/2017
+End Date: 07/15/2018
+
+Lets check the date range for the token data
+
+First convert the Unix time of the token data to Date format
+
+```{r}
+newwithoutoutlierdata <- WithoutOutlierdata
+newwithoutoutlierdata$unixTime <- as.Date(as.POSIXct(WithoutOutlierdata$unixTime,origin="1970-01-01",tz="GMT"))
+
+
+
+```
+
+
