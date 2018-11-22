@@ -57,9 +57,46 @@ First convert the Unix time of the token data to Date format
 ```{r}
 newwithoutoutlierdata <- WithoutOutlierdata
 newwithoutoutlierdata$unixTime <- as.Date(as.POSIXct(WithoutOutlierdata$unixTime,origin="1970-01-01",tz="GMT"))
-
+class(newwithoutoutlierdata$unixTime)
 
 
 ```
 
+loading the price data :
+```{r}
+priceData <- read.delim("storj", header = TRUE, sep = "\t")
+head(priceData)
+priceData$Date <- as.Date(priceData$Date, "%m/%d/%Y")
+head(priceData$Date)
+```
+add the price return to the dataframe:
 
+```{r}
+
+priceData$Open[1]
+(priceData$Open[2]-priceData$Open[1])/priceData$Open[1]
+
+
+```
+create the price return column:
+```{r}
+return <- numeric(nrow(priceData))
+return[1] <- priceData$Open[1]
+for (i in 2:nrow(priceData)) {
+  return[i] <- (priceData$Open[i]-priceData$Open[i-1])/priceData$Open[i-1]
+}
+return[2]
+return
+```
+adding the price return column to the pricedata dataframe
+```{r}
+priceData$return <- return
+priceData$return[2]
+colnames(newwithoutoutlierdata)<-c('fromNode','toNode','Date','totalAmount')
+newwithoutoutlierdata$Date[4]
+```
+merge both the dataframes according to dates
+```{r}
+newdataset <- merge(newwithoutoutlierdata,priceData,by = "Date")
+
+```
