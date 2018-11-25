@@ -67,7 +67,7 @@ loading the price data :
 priceData <- read.delim("storj", header = TRUE, sep = "\t")
 head(priceData)
 priceData$Date <- as.Date(priceData$Date, "%m/%d/%Y")
-head(priceData$Date)
+nrow(priceData)
 ```
 add the price return to the dataframe:
 
@@ -81,9 +81,9 @@ priceData$Open[1]
 create the price return column:
 ```{r}
 return <- numeric(nrow(priceData))
-return[1] <- priceData$Open[1]
-for (i in 2:nrow(priceData)) {
-  return[i] <- (priceData$Open[i]-priceData$Open[i-1])/priceData$Open[i-1]
+return[379] <- priceData$Open[379]
+for (i in 378:1) {
+  return[i] <- (priceData$Open[i]-priceData$Open[i+1])/priceData$Open[i+1]
 }
 return[2]
 return
@@ -91,12 +91,98 @@ return
 adding the price return column to the pricedata dataframe
 ```{r}
 priceData$return <- return
-priceData$return[2]
+priceData$return[378]
+head(newwithoutoutlierdata$Date)
 colnames(newwithoutoutlierdata)<-c('fromNode','toNode','Date','totalAmount')
 newwithoutoutlierdata$Date[4]
+class(priceData$Date)
 ```
 merge both the dataframes according to dates
 ```{r}
 newdataset <- merge(newwithoutoutlierdata,priceData,by = "Date")
+head(newdataset$Date)
+```
+
+
+Creating  a feature of no of transactions from the data for doing simple linear regression.
+
+```{r}
+frequencytrans <- table(newdataset$Date)
+freqtrans<- as.data.frame(frequencytrans)
+colnames(freqtrans) <- c("Date","no_of_trans")
+freqtrans$Date <- as.Date(freqtrans$Date)
+```
+mergeing 
+ freq trans with newdataset
+ 
+```{r}
+simpletable <- merge(priceData,freqtrans,by = "Date")
+head(simpletable$Date)
+newsimpletable$no_of_trans <- simpletable$no_of_trans
+newsimpletable$return<-simpletable$return
+newsimpletable<- newsimpletable[,-1]
+head(newsimpletable)
+```
+Data Preparation:
+
+```{r}
+summary(newsimpletable)
+hist(newsimpletable$no_of_trans)
+hist(newsimpletable$return)
+```
+
+Analysis:
+
+```{r}
+par(mfrow = c(1,1))
+bx = boxplot(newsimpletable$no_of_trans,ylim = c(0,5000))
+```
+checking the distribution of no of transactions:
+
+```{r}
+quantile(newsimpletable$no_of_trans, seq(0,1,0.02))
+```
+boxplot stats:
+```{r}
+bx$stats
+```
+```{r}
+summary(newsimpletable$no_of_trans)
+```
+capping at 96%
+
+```{r}
+newsimpletable$no_of_trans<-ifelse(newsimpletable$no_of_trans>2000,1500,newsimpletable$no_of_trans)
+boxplot(newsimpletable$no_of_trans)
+```
+checking the response variable:
+
+```{r}
+boxplot(newsimpletable$return)
+```
+bivariate analysis:
+
+```{r}
+
+plot(newsimpletable$no_of_trans,newsimpletable$return)
 
 ```
+
+lets check the correlation:
+
+```{r}
+cor(newsimpletable)
+```
+
+fitting the linear model:
+
+```{r}
+library(fmsb)
+final_data <- lm(return~no_of_trans,data=newsimpletable)
+VIF(final_data)
+summary(final_data)
+library(lmtest)
+par(mfrow = c(2,2))
+plot(final_data)
+```
+
