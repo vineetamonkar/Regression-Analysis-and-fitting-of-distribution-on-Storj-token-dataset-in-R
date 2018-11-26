@@ -108,6 +108,8 @@ Creating  a feature of no of transactions from the data for doing simple linear 
 
 ```{r}
 frequencytrans <- table(newdataset$Date)
+summary(freqtrans)
+
 freqtrans<- as.data.frame(frequencytrans)
 colnames(freqtrans) <- c("Date","no_of_trans")
 freqtrans$Date <- as.Date(freqtrans$Date)
@@ -117,11 +119,11 @@ mergeing
  
 ```{r}
 simpletable <- merge(priceData,freqtrans,by = "Date")
-head(simpletable$Date)
+head(simpletable$return)
 newsimpletable$no_of_trans <- simpletable$no_of_trans
 newsimpletable$return<-simpletable$return
 newsimpletable<- newsimpletable[,-1]
-head(newsimpletable)
+head(newsimpletable$no_of_trans)
 ```
 Data Preparation:
 
@@ -185,4 +187,126 @@ library(lmtest)
 par(mfrow = c(2,2))
 plot(final_data)
 ```
+ now trying by taking the sqaureroot of the predictor variable:
+ 
+ 
+```{r}
+newsimpletable$no_of_trans <- (newsimpletable$no_of_trans)^(0.5)
+final_data <- lm(return~no_of_trans,data=newsimpletable)
+VIF(final_data)
+summary(final_data)
+```
+creating 2 new features no of tokens and no of buys:
+
+so first dividing the total amount of the dataset with 10^8 to find the no of tokens and then grouping it and adding it acording to the date
+```{r}
+newdataset$totalAmount <- (newdataset$totalAmount/(10^8))
+tokentable <- aggregate(newdataset$totalAmount, by = list(Category = newdataset$Date), FUN = sum)
+head(tokentable)
+colnames(tokentable)<- c("Date","total tokens")
+simpletable <- merge(simpletable,tokentable,by = "Date")
+newsimpletable$total_token <- simpletable$`total tokens`
+
+class(newdataset$Date)
+buyerstable <- aggregate(data=newdataset, toNode ~ Date, function(x) length(unique(x)))
+head(buyerstable)
+summary(buyerstable)
+colnames(buyerstable) <- c("Date","unique_buyers")
+simpletable  <- merge(simpletable,buyerstable,by = "Date")
+newsimpletable$unique_buyers <- simpletable$unique_buyers
+```
+
+time for data preparation:
+
+```{r}
+summary(newsimpletable)
+```
+
+then lets do univariate analysis on all independent variables
+
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$no_of_trans)
+```
+capping the outliers:
+
+```{r}
+quantile(newsimpletable$no_of_trans, seq(0,1,0.02))
+newsimpletable$no_of_trans<-ifelse(newsimpletable$no_of_trans>60,59,newsimpletable$no_of_trans)
+boxplot(newsimpletable$no_of_trans)
+```
+checking unique buyers:
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$unique_buyers)
+quantile(newsimpletable$unique_buyers, seq(0,1,0.02))
+newsimpletable$unique_buyers<-ifelse(newsimpletable$unique_buyers>3087,3088,newsimpletable$unique_buyers)
+boxplot(newsimpletable$unique_buyers)
+```
+
+checking for no of tokens:
+
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$total_token)
+quantile(newsimpletable$total_token, seq(0,1,0.02))
+newsimpletable$total_token<-ifelse(newsimpletable$total_token>5791001,5791001,newsimpletable$total_token)
+boxplot(newsimpletable$total_token)
+```
+
+lets check the response variable:
+
+```{r}
+hist(newsimpletable$return)
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$return)
+
+```
+bivariate analysis:
+
+square root number of transactions vs return:
+
+```{r}
+plot(newsimpletable$no_of_trans,newsimpletable$return)
+```
+
+lets check for total token vs return:
+
+```{r}
+plot(newsimpletable$total_token,newsimpletable$return)
+```
+
+lets check unique buyers vs return:
+
+```{r}
+plot(newsimpletable$unique_buyers,newsimpletable$return)
+```
+lets check the correlation:
+
+```{r}
+cor(newsimpletable)
+```
+
+lets make the initial linear model:
+
+```{r}
+final_data2 <- lm(return~no.,data = newsimpletable)
+library(car)
+vif(final_data2)
+summary(final_data2)
+step(final_data2)
+final_data3 <- lm(formula = return ~ no_of_trans + total_token, data = newsimpletable)
+summary(final_data)
+final_data4 <- lm(formula = return ~ total_token, data = newsimpletable)
+summary(final_data4)
+plot(final_data3)
+```
+lets extract one more feature
+no of investors who have bought more than ten token:
+
+```{r}
+library(dplyr)
+```
+
+
 
