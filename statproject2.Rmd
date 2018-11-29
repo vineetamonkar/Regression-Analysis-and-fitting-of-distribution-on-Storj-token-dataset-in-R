@@ -118,11 +118,10 @@ mergeing
  freq trans with newdataset
  
 ```{r}
-simpletable <- merge(priceData,freqtrans,by = "Date")
-head(simpletable$return)
-newsimpletable$no_of_trans <- simpletable$no_of_trans
-newsimpletable$return<-simpletable$return
-newsimpletable<- newsimpletable[,-1]
+newsimpletable <- merge(priceData,freqtrans,by = "Date")
+head(newsimpletable$return)
+
+newsimpletable<- newsimpletable[,c(-2:-7)]
 head(newsimpletable$no_of_trans)
 ```
 Data Preparation:
@@ -173,7 +172,7 @@ plot(newsimpletable$no_of_trans,newsimpletable$return)
 lets check the correlation:
 
 ```{r}
-cor(newsimpletable)
+cor(newsimpletable[,c(2,3)])
 ```
 
 fitting the linear model:
@@ -203,17 +202,17 @@ so first dividing the total amount of the dataset with 10^8 to find the no of to
 newdataset$totalAmount <- (newdataset$totalAmount/(10^8))
 tokentable <- aggregate(newdataset$totalAmount, by = list(Category = newdataset$Date), FUN = sum)
 head(tokentable)
-colnames(tokentable)<- c("Date","total tokens")
-simpletable <- merge(simpletable,tokentable,by = "Date")
-newsimpletable$total_token <- simpletable$`total tokens`
+colnames(tokentable)<- c("Date","total_token")
+newsimpletable <- merge(newsimpletable,tokentable,by = "Date")
+
 
 class(newdataset$Date)
 buyerstable <- aggregate(data=newdataset, toNode ~ Date, function(x) length(unique(x)))
 head(buyerstable)
 summary(buyerstable)
 colnames(buyerstable) <- c("Date","unique_buyers")
-simpletable  <- merge(simpletable,buyerstable,by = "Date")
-newsimpletable$unique_buyers <- simpletable$unique_buyers
+newsimpletable  <- merge(newsimpletable,buyerstable,by = "Date")
+
 ```
 
 time for data preparation:
@@ -231,9 +230,9 @@ bx = boxplot(newsimpletable$no_of_trans)
 capping the outliers:
 
 ```{r}
-quantile(newsimpletable$no_of_trans, seq(0,1,0.02))
-newsimpletable$no_of_trans<-ifelse(newsimpletable$no_of_trans>60,59,newsimpletable$no_of_trans)
-boxplot(newsimpletable$no_of_trans)
+# quantile(newsimpletable$no_of_trans, seq(0,1,0.02))
+# newsimpletable$no_of_trans<-ifelse(newsimpletable$no_of_trans>60,59,newsimpletable$no_of_trans)
+# boxplot(newsimpletable$no_of_trans)
 ```
 checking unique buyers:
 ```{r}
@@ -284,19 +283,19 @@ plot(newsimpletable$unique_buyers,newsimpletable$return)
 lets check the correlation:
 
 ```{r}
-cor(newsimpletable)
+cor(newsimpletable[,c(2:5)])
 ```
 
 lets make the initial linear model:
 
 ```{r}
-final_data2 <- lm(return~no.,data = newsimpletable)
+final_data2 <- lm(return~no_of_trans+total_token+unique_buyers+percentage_investors,data = newsimpletable)
 library(car)
 vif(final_data2)
 summary(final_data2)
 step(final_data2)
-final_data3 <- lm(formula = return ~ no_of_trans + total_token, data = newsimpletable)
-summary(final_data)
+final_data3 <- lm(formula = return ~ no_of_trans + percentage_investors, data = newsimpletable)
+summary(final_data3)
 final_data4 <- lm(formula = return ~ total_token, data = newsimpletable)
 summary(final_data4)
 plot(final_data3)
@@ -306,7 +305,40 @@ no of investors who have bought more than ten token:
 
 ```{r}
 library(dplyr)
+summary(newdataset)
 ```
 
+we will first need to find the total number of investors per day and then find the  total tokens  bought by each investor per day. then we have to find the number pf investors who bought more than 10 token that day.
 
+
+```{r}
+investortable <- newdataset %>% group_by(Date)
+totalinvestor_table<- summarize(investortable , total_investors = n_distinct(toNode))
+head(totalinvestor_table)
+newinvestortable <- newdataset %>% group_by(Date,toNode)
+newinvestortable_totaltoken <- summarise(newinvestortable,total_token = sum(totalAmount))
+summary(newinvestortable_totaltoken)
+subsetnewinvestortable_totaltoken <- newinvestortable_totaltoken[ which(newinvestortable_totaltoken$total_token>100), ]
+finalinvestortable <- summarise(subsetnewinvestortable_totaltoken, final_investors = n_distinct(toNode))
+newfinalinvestortable <- merge(totalinvestor_table,finalinvestortable,by = "Date")
+newfinalinvestortable$percentage_investors <- (newfinalinvestortable$final_investors/newfinalinvestortable$total_investors)*100
+newsimpletable <- merge(newsimpletable,newfinalinvestortable,by = "Date")
+
+```
+writiting the previous day fix :
+
+```{r}
+head(newsimpletable$Date)
+tail(newsimpletable$return)
+
+shift <- function(x, n){
+  c(x[-(seq(n))], rep(NA, n))
+}
+
+newsimpletable$return <- shift(newsimpletable$return, 1)
+newsimpletable <- newsimpletable[1:(nrow(newsimpletable)-1),]
+
+
+
+```
 
