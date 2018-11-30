@@ -1,0 +1,422 @@
+---
+title: "Project Report"
+author: "Ruolan Zeng(rxz171630), Vineet Vilas Amonkar(vva180000)"
+date: "November 29, 2018"
+output: html_document
+---
+## Abstract:
+
+In this project we are creating linear models using multiple linear regression on the price dataset and token dataset of the storj token from the Ethereum blockchain. 
+Our response variable(y) is simple price return given by pt -pt-1 / pt-1 where, pt is the token price in dollar for tth day.
+The regressor variables(x1...xn) are as follows:
+1)No of token transactions per day
+2)No of total token bought or sold per day
+3)No of unique buyers per day
+4)Percentage of investors who bought more than token per day.
+
+## About the datasets:
+
+We have been given two datasets:
+
+1) Price data:
+
+This is the price dataset for storj token it contains 379 rows and 7 columns as follows:
+
+1)Date
+2)Open : Opening price of the token on that day
+3)High : Max price of the token on that day
+4)Low : Min price of the token on that day
+5)Close : Closing price of the token on that day
+6)Volume : Volume of the token on that day
+7)Market Cap: Market Cap of that token on that day
+
+2) Token data:
+
+This is the storj token transation dataset which has 406131 rows and 4 columns as follows:
+
+1)from_node : These are the id which sell the token in the transaction
+2)to_node : These are the id which buy the token in the transaction
+3)unixtime : unix time of the transaction
+4)totalamount : total subunits of the storj token involved in the transaction
+
+
+## Initialization:
+
+We start with loading the token data and price data:
+
+```{r}
+tokenData <- read.delim("networkstorjTX.txt", header = FALSE, sep = " ")
+tokenFrame<- as.data.frame(tokenData)
+colnames(tokenFrame)<-c('fromNode','toNode','unixTime','totalAmount')
+priceData <- read.delim("storj", header = TRUE, sep = "\t")
+```
+
+## Preprocessing the token data:
+
+Removing the Outliers:
+
+We then remove the outliers from the token data. Here we will be removing all the totalamount values from the token dataset who has value greater than the total supply of the storj token. We are removing these values because no transaction can have totalamount greater than the total supply of the tokens.
+
+```{r}
+TotalSupply <- 424999998
+Decimals <- 10^8
+OutlierValue <- TotalSupply*Decimals
+WithoutOutlierdata <- tokenFrame[ which(tokenFrame$totalAmount < OutlierValue),]
+nrow(WithoutOutlierdata)
+```
+
+We can now see that the number of records of the token dataset have now reduced to 406078
+
+Converting the Unix time to date format:
+
+We will convert the unix time of the token data to the date format. This would help us in merging both the datasets.
+
+```{r}
+newwithoutoutlierdata <- WithoutOutlierdata
+newwithoutoutlierdata$unixTime <- as.Date(as.POSIXct(WithoutOutlierdata$unixTime,origin="1970-01-01",tz="GMT"))
+
+```
+
+Converting the class of price data date from factor to Date:
+
+```{r}
+priceData$Date <- as.Date(priceData$Date, "%m/%d/%Y")
+
+```
+
+## The response variable:
+
+We will now calculate the response variable from the price data using the open column.
+
+```{r}
+return <- numeric(nrow(priceData))
+return[379] <- priceData$Open[379]
+for (i in 378:1) {
+  return[i] <- (priceData$Open[i]-priceData$Open[i+1])/priceData$Open[i+1]
+}
+priceData$return <- return
+```
+
+## Merging the datasets:
+
+We will then merge both the datasets according to date which would help us in calculating the regressor variables.
+
+```{r}
+colnames(newwithoutoutlierdata)<-c('fromNode','toNode','Date','totalAmount')
+newdataset <- merge(newwithoutoutlierdata,priceData,by = "Date")
+
+```
+
+We can see that the records have now decreased to 404257 this was because of the date difference between the price data and token data.
+
+```{r}
+#token data dates
+summary(newwithoutoutlierdata$Date)
+#price data dates
+summary(priceData$Date)
+#dates after merging
+summary(newdataset$Date)
+```
+
+## Feature Engineering:
+
+We will now be calculating the first feature for creating the linear model:
+
+Number of transactions that happened each day
+
+```{r}
+frequencytrans <- table(newdataset$Date)
+summary(freqtrans)
+
+freqtrans<- as.data.frame(frequencytrans)
+colnames(freqtrans) <- c("Date","no_of_trans")
+freqtrans$Date <- as.Date(freqtrans$Date)
+```
+
+Now lets create a table which contains the regressor and response variable:
+
+```{r}
+newsimpletable <- merge(priceData,freqtrans,by = "Date")
+newsimpletable<- newsimpletable[,c(-2:-7)]
+```
+
+## Simple Linear Regression 1: 
+
+Data preparation:
+
+This involves visualization, univariate and bivariate analysis:
+
+Visualization :
+
+```{r}
+hist(newsimpletable$no_of_trans)
+hist(newsimpletable$return)
+```
+
+Univariate Analysis:
+
+In this we will check for outliers and then remove them by capping our data to the max value 
+
+```{r}
+par(mfrow = c(1,2))
+bx = boxplot(newsimpletable$no_of_trans,ylim = c(0,5000))
+```
+Now lets find gthe max value for removing the outliers:
+
+```{r}
+quantile(newsimpletable$no_of_trans, seq(0,1,0.02))
+bx$stats
+```
+
+To remove majority of the outlier we are capping the data 92% quantile
+
+```{r}
+newsimpletable$no_of_trans<-ifelse(newsimpletable$no_of_trans>2275,2274.36,newsimpletable$no_of_trans)
+boxplot(newsimpletable$no_of_trans)
+```
+Now, lets check the response variable: return
+
+```{r}
+boxplot(newsimpletable$return)
+```
+But in this case we won't be removing any outliers as we don't want to have any impact on the response variable.
+
+
+Bivariate Analysis:
+
+In this analysis we will draw the scatterplot between the regressor and the response variable
+
+but before we do that it is important to shift our response variable up by one row because we will be using yesterday to model today's response.
+
+```{r}
+
+shift <- function(x, n){
+  c(x[-(seq(n))], rep(NA, n))
+}
+
+
+newsimpletable$return <- shift(newsimpletable$return, 1)
+newsimpletable <- newsimpletable[1:(nrow(newsimpletable)-1),]
+plot(newsimpletable$no_of_trans,newsimpletable$return)
+```
+
+We can see that there isn't much relation between no of transactions each day and the simple return variable. We can confirm this by finding the correlation between the two
+
+```{r}
+cor(newsimpletable[,c(2,3)])
+```
+
+After completing the analysis we move ahead to fit the linear model.
+
+```{r}
+final_data <- lm(return~no_of_trans,data=newsimpletable)
+summary(final_data)
+```
+
+From the summary of the linear model we can clearly see that it is not a good model, the p-values of the intercept and the regressor are very high, also the r-square conveys only 2% of the response variable.
+
+We can test this linear model using the following function:
+
+```{r}
+library(lmtest)
+par(mfrow = c(2,2))
+plot(final_data)
+```
+
+lets try to interpret these 4 plots one by one:
+
+1) Residuals vs fitted:
+
+Even though we see a horizontal line in this plot we can see that the residuals are not evenly spread across the line.It may not suggest a pattern but we can see most of the points in the left speculating a non-linear behaviour
+
+2)Normal Q-Q:
+
+The plot leads us to believe that the residuals follow normality as most of the points are seen to lie on the line or near it although few observations such as 42,2 and 156 are significantly away from the line.
+
+3)Scale-Location:
+
+The horizontal line in this plot suggests that homoscedasticity is observed in the residuals.
+
+4) Residuals vs leverage:
+
+This plots finds the observations which have a high influence on the regression model according to the cooks distance. We can see that observation 42 is out of the region thus is an outlier which could have an impact on the model if we do remove or decide to keep it in the model.
+
+## Simple linear model 2
+
+Before moving on to multiple linear regression and creating more features for the model lets try taking square root on the regressor variable and how it affects the linear model.
+
+```{r}
+anothersimpletable <- merge(priceData,freqtrans,by = "Date")
+anothersimpletable<- anothersimpletable[,c(-2:-7)]
+anothersimpletable$return <- shift(anothersimpletable$return, 1)
+anothersimpletable <- anothersimpletable[1:(nrow(anothersimpletable)-1),]
+anothersimpletable$no_of_trans <- anothersimpletable$no_of_trans^(0.5)
+```
+Now lets check the linear model with this regressor variable similarly like before:
+
+```{r}
+final_data2 <- lm(return~no_of_trans,data=anothersimpletable)
+summary(final_data2)
+
+
+```
+
+From the summary we can see that it hasn't improved our model hence moving on to multiple linear regression.
+
+## Multiple Linear Regression:
+
+We will now create three new features for our multiple regression model:
+
+1) Total number of tokens involved per day:
+
+We will first divide the total amount of each transaction with number of sub units of the storj token(10^8) to get the number of tokens, then we will group by and sum each amount according to the date
+
+```{r}
+newdataset$totalAmount <- (newdataset$totalAmount/(10^8))
+tokentable <- aggregate(newdataset$totalAmount, by = list(Category = newdataset$Date), FUN = sum)
+
+colnames(tokentable)<- c("Date","total_token")
+newsimpletable <- merge(newsimpletable,tokentable,by = "Date")
+```
+
+2) Number of Unique buyers per day:
+
+In this we group the dataset according to the date and then count the number of unique buyers for each day.
+
+```{r}
+
+buyerstable <- aggregate(data=newdataset, toNode ~ Date, function(x) length(unique(x)))
+head(buyerstable)
+summary(buyerstable)
+colnames(buyerstable) <- c("Date","unique_buyers")
+newsimpletable  <- merge(newsimpletable,buyerstable,by = "Date")
+```
+
+3) Percentage of investors who have bought more than 10 tokens:
+
+In this we will first need to find the total number of investors per day and then find the  total tokens  bought by each investor per day. then we have to find the number of investors who bought more than 10 token that day.
+
+```{r}
+library(dplyr)
+investortable <- newdataset %>% group_by(Date)
+totalinvestor_table<- summarize(investortable , total_investors = n_distinct(toNode))
+newinvestortable <- newdataset %>% group_by(Date,toNode)
+newinvestortable_totaltoken <- summarise(newinvestortable,total_token = sum(totalAmount))
+subsetnewinvestortable_totaltoken <- newinvestortable_totaltoken[ which(newinvestortable_totaltoken$total_token>10), ]
+finalinvestortable <- summarise(subsetnewinvestortable_totaltoken, final_investors = n_distinct(toNode))
+newfinalinvestortable <- merge(totalinvestor_table,finalinvestortable,by = "Date")
+newfinalinvestortable$percentage_investors <- (newfinalinvestortable$final_investors/newfinalinvestortable$total_investors)*100
+newsimpletable <- merge(newsimpletable,newfinalinvestortable,by = "Date")
+summary(newsimpletable)
+```
+
+Now that we have all the required features lets do the analysis as we did for the simple linear regression:
+
+Univariate analysis:
+
+Create a boxplot of unique buys regressor variable:
+
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$unique_buyers)
+quantile(newsimpletable$unique_buyers, seq(0,1,0.02))
+newsimpletable$unique_buyers<-ifelse(newsimpletable$unique_buyers>3087,3088,newsimpletable$unique_buyers)
+boxplot(newsimpletable$unique_buyers)
+
+```
+
+Now we check for the number of tokens:
+and capping at 94%
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$total_token)
+quantile(newsimpletable$total_token, seq(0,1,0.02))
+newsimpletable$total_token<-ifelse(newsimpletable$total_token>5791001,5791001,newsimpletable$total_token)
+boxplot(newsimpletable$total_token)
+
+
+
+```
+
+lets check for the percentage of investors variable:
+
+```{r}
+par(mfrow=c(1,2))
+bx = boxplot(newsimpletable$percentage_investors)
+quantile(newsimpletable$percentage_investors, seq(0,1,0.02))
+newsimpletable$percentage_investors<-ifelse(newsimpletable$percentage_investors<60,61.2,newsimpletable$percentage_investors)
+boxplot(newsimpletable$percentage_investors)
+```
+ After the univariate analysis lets do the bivariate analysis:
+ 
+ number of transactions vs return:
+ 
+ 
+```{r}
+plot(newsimpletable$no_of_trans,newsimpletable$return)
+```
+ plot total token vs return
+ 
+ 
+ 
+```{r}
+plot(newsimpletable$total_token,newsimpletable$return)
+```
+
+plot unique buyers vs return:
+
+```{r}
+plot(newsimpletable$unique_buyers,newsimpletable$return)
+```
+plot percentage investors vs return
+
+```{r}
+plot(newsimpletable$percentage_investors,newsimpletable$return)
+```
+
+The relationships can be much better explained with the help of correlation:
+
+```{r}
+cor(newsimpletable[,c(2:8)])
+```
+
+After analysing lets create an initial multiple regression linear model :
+
+We use the car library to calculate variable inflation factor and find the multicollinearity
+
+```{r}
+final_data3 <- lm(return~no_of_trans+total_token+unique_buyers+percentage_investors,data = newsimpletable)
+library(car)
+vif(final_data3)
+
+
+
+```
+
+
+Since the VIF for all the regressor variables is not much higher than 5 we will keep all of them in the initial model
+
+```{r}
+summary(final_data3)
+```
+
+From the summary we can see that the p-value for the variables is very high suggesting that there is no linear relation between the regressor variable and the response variables, but before we reject the model, we can use the step function in r which gives the best combination of the available regressors to create the model
+
+```{r}
+step(final_data3)
+```
+
+The step function chooses that combination which gives the lowest AIC value, lets create a linear model for that function:
+
+```{r}
+final_data4 <- lm(formula = return ~ total_token + unique_buyers, data = newsimpletable)
+summary(final_data4)
+```
+
+Conclusion:
+
+We can see that this model is bit better than the previous model, but still the r values are far from good. This leaves us with the conclusion that the chosen features do not contribute much to the model and hence they need to be changed or replaced to develop a better model.
+We have analysed how we can use simple and multiple linear regression to create linear models by doing feature extraction on the storj token and price data.
+The model needs to be redeveloped and tested with different features however the method of creation and analysis remains the same.
+
+Thank You
