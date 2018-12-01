@@ -8,7 +8,7 @@ output:
 ---
 
 ## Abstract 
-The aim of the project is to implement different statistical methods on the Storj Token transaction data.The results of the methods are analyzed to derive inferences about the token data.In the first part, we find how many times a user buys or sells the STORJ token, then fit a distribution and estimate the best distribution.In the second part we find the correlation between the STORJ Token price data and layer features of the STORJ Token.In the third part of we find the most active buyer and seller of our STORJ token and then track them in all other tokens. We find their plot of how many unique tokens have they invested in the provided time frame then fit and estimate distributions as part 1.
+The aim of the project is to implement different statistical methods on the Storj Token transaction data.The results of the methods are analyzed to derive inferences about the token data.In 4.1, we found how many times a user buys or sells the STORJ token, then fit a distribution and estimate the best distribution.In 4.2, we find the correlation between the STORJ Token price data and layer features of the STORJ Token.In 4.3, we find the most active buyer and seller of our STORJ token and then track them in all other tokens, plot how many unique tokens have they invested in the provided time frame then fit and estimate distributions as part 1. In 4.4, we created  a multiple linear regression model to explain price return on day t. 
 
 ## 1. Introduction:
 
@@ -184,14 +184,6 @@ fitSells5 <- fitdist(freqNoSells$freqNoSells, "norm")
 plot(fitSells2)
 ```
 
-#### 4.1.3 Conclusion
-We totally tried 5 distributions: Poisson Distribution, Weibull Distribution, Exponential Distribution, Geometric Distribution, Normal Distribution. After compare with parameters and graphs of different distributions, we can find:
-The distribution of buyers and sellers are similiar.
-The estimate parameters of Normal Distribution are very close to the parameters of our token data, but the graphs don't fit well. 
-The graphs of Poisson Distribution and Weibull Distribution both fit our token data well, but for the parameters, the mean(buys:1331.66, sells:499.26) is not equal to variance(buys:133341824.3, sells:17815729.69), so it should not be Poisson Distribution.
-
-Hence, we finally conclude that **Weibull Distribution** fit our distribution best.
-
 ### 4.2 Q2
 
 #### 4.2.1 Calulate Correlations
@@ -205,6 +197,10 @@ priceData$Date <- as.Date(priceData$Date,"%m/%d/%Y")
 
 # Join Two Data by Date
 CombineData <- merge(x = WithoutOutlierdata, y = priceData, by = "Date")
+buyerstable <- aggregate(data=CombineData, toNode ~ Date, function(x) length(unique(x)))
+colnames(buyerstable) <- c("Date","unique_buyers")
+CombineData <- merge(CombineData,buyerstable,by = "Date")
+CombineData <- unique(CombineData[,c(1,4:11)])
 
 ## Create layers and calulate correlations
 library(dplyr)
@@ -214,22 +210,10 @@ maxValue <- max(WithoutOutlierdata$totalAmount)
 for(a in alpha){
   value <- a*maxValue
   layer <- CombineData[ which(CombineData$totalAmount < value),]
-  result<-layer %>% select(Date,fromNode,Open,High,Low,Close,Volume) %>% 
-    group_by(Date) %>% 
-    mutate(fromNode = n())
-  result <- unique(result)
-  colnames(result) <- c('Date','TransNo','Open','High','Low','Close','Volume')
-  correlation <- cor(result$TransNo, result$Open,use="complete.obs",method = "pearson")
-  correlation2 <- cor(result$TransNo, result$High,use="complete.obs",method = "pearson")
-  correlation3 <- cor(result$TransNo, result$Low,use="complete.obs",method = "pearson")
-  correlation4 <- cor(result$TransNo, result$Close,use="complete.obs",method = "pearson")
-  correlation5 <- cor(result$TransNo, as.numeric(result$Volume),use="complete.obs",method = "pearson")
-  print(correlation3)
+  correlation <- cor(layer$unique_buyers, layer$Open,use="complete.obs",method = "pearson")
+  print(correlation)
 }
 ```
-
-#### 4.2.2 Conclusion
-The number of layers is 15. The best correlation is 0.193.
 
 ### 4.3 Q3
 
@@ -509,12 +493,153 @@ dateintervalSeller2 <- c("Jul-17","Aug-17","Sep-17","Oct-17","Nov-17","Dec-17","
 barplot(countArraySeller,names.arg = dateintervalSeller2,ylab = "no of unique tokens", xlab = "month")
 ```
 
+### 4.4 Q4
 
-#### 4.3.3 Conclusion
+In this part we created a multiple linear regression model on the price data and our primary token data.Our response variable(y) is simple price return given by $p_{t} -p_{t-1} / p_{t-1}$ where, $p_{t}$ is the token price in dollar for $t_{th}$ day.
+The regressor variables(x1...xn) are as follows:
+1)No of token transactions per day
+2)No of total token bought or sold per day
+3)No of unique buyers per day
+4)Percentage of investors who bought more than token per day.
 
+```{r}
+# create return data
+return <- numeric(nrow(priceData))
+return[379] <- priceData$Open[379]
+for (i in 378:1) {
+  return[i] <- (priceData$Open[i]-priceData$Open[i+1])/priceData$Open[i+1]
+}
+priceData$return <- return
+```
+
+#### 4.4.1 Regressors 
+
+(1) Total number of tokens involved per day:
+First divide the total amount of each transaction by number of sub units of the storj token(10^8) to get the number of tokens, then  group by and sum each amount according to the date。
+
+```{r}
+newsimpletable <- merge(WithoutOutlierdata,priceData,by = "Date")
+newsimpletable$totalAmount <- (newsimpletable$totalAmount/(10^8))
+tokentable <- aggregate(newsimpletable$totalAmount, by = list(Category = newsimpletable$Date), FUN = sum)
+colnames(tokentable)<- c("Date","total_token")
+newsimpletable <- merge(newsimpletable,tokentable,by = "Date")
+```
+
+(2) Number of Unique buyers per day:
+In this we group the dataset according to the date and then count the number of unique buyers for each day.
+
+```{r}
+buyerstable <- aggregate(data=newsimpletable, toNode ~ Date, function(x) length(unique(x)))
+colnames(buyerstable) <- c("Date","unique_buyers")
+newsimpletable  <- merge(newsimpletable,buyerstable,by = "Date")
+```
+
+(3) Percentage of investors who have bought more than 10 tokens:
+In this we will first need to find the total number of investors per day and then find the  total tokens  bought by each investor per day. then we have to find the number of investors who bought more than 10 token that day.
+
+```{r}
+library(dplyr)
+investortable <- newsimpletable %>% group_by(Date)
+totalinvestor_table<- summarize(investortable , total_investors = n_distinct(toNode))
+newinvestortable <- newsimpletable %>% group_by(Date,toNode)
+newinvestortable_totaltoken <- summarise(newinvestortable,total_token = sum(totalAmount))
+subsetnewinvestortable_totaltoken <- newinvestortable_totaltoken[ which(newinvestortable_totaltoken$total_token>10), ]
+finalinvestortable <- summarise(subsetnewinvestortable_totaltoken, final_investors = n_distinct(toNode))
+newfinalinvestortable <- merge(totalinvestor_table,finalinvestortable,by = "Date")
+newfinalinvestortable$percentage_investors <- (newfinalinvestortable$final_investors/newfinalinvestortable$total_investors)*100
+newsimpletable <- merge(newsimpletable,newfinalinvestortable,by = "Date")
+```
+
+#### 4.4.2 Univariate analysis and bivariate analysis
+
+(1) Univariate analysis
+Create a boxplot of unique buys regressor variable.
+```{r}
+par(mfrow=c(1,2))
+# bx = boxplot(newsimpletable$unique_buyers)
+# quantile(newsimpletable$unique_buyers, seq(0,1,0.02))
+newsimpletable$unique_buyers<-ifelse(newsimpletable$unique_buyers>3087,3088,newsimpletable$unique_buyers)
+# boxplot(newsimpletable$unique_buyers)
+```
+
+Check for the number of tokens and capping at 94%.
+```{r}
+par(mfrow=c(1,2))
+# bx = boxplot(newsimpletable$total_token)
+# quantile(newsimpletable$total_token, seq(0,1,0.02))
+newsimpletable$total_token<-ifelse(newsimpletable$total_token>5791001,5791001,newsimpletable$total_token)
+# boxplot(newsimpletable$total_token)
+```
+
+Check for the percentage of investors variable.
+```{r}
+par(mfrow=c(1,2))
+# bx = boxplot(newsimpletable$percentage_investors)
+# quantile(newsimpletable$percentage_investors, seq(0,1,0.02))
+newsimpletable$percentage_investors<-ifelse(newsimpletable$percentage_investors<60,61.2,newsimpletable$percentage_investors)
+# boxplot(newsimpletable$percentage_investors)
+```
+
+(2) Bivariate analysis  
+Total token vs Return.
+```{r}
+plot(newsimpletable$total_token,newsimpletable$return)
+```
+
+Unique buyers vs Return.
+```{r}
+plot(newsimpletable$unique_buyers,newsimpletable$return)
+```
+
+Percentage investors vs Return
+```{r}
+plot(newsimpletable$percentage_investors,newsimpletable$return)
+```
+
+#### 4.4.2 Mutiple Linear Model
+
+```{r}
+final_data <- lm(return~total_token+unique_buyers+percentage_investors,data = newsimpletable)
+library(car)
+vif(final_data)
+summary(final_data)
+```
+
+Plot the result:
+(1) Residuals vs fitted
+Even though we see a horizontal line in this plot we can see that the residuals are not evenly spread across the line.It may not suggest a pattern but we can see most of the points in the left speculating a non-linear behaviour
+
+(2)Normal Q-Q
+The plot leads us to believe that the residuals follow normality as most of the points are seen to lie on the line or near it although few observations such as 42,2 and 156 are significantly away from the line.
+
+(3)Scale-Location
+The horizontal line in this plot suggests that homoscedasticity is observed in the residuals.
+
+(4) Residuals vs leverage
+This plots finds the observations which have a high influence on the regression model according to the cooks distance. We can see that observation 42 is out of the region thus is an outlier which could have an impact on the model if we do remove or decide to keep it in the model.
+
+```{r}
+plot(final_data)
+```
+
+## 5.Conclusion
+
+### 5.1 Q1
+We totally tried 5 distributions while fiting distributions with our data: Poisson Distribution, Weibull Distribution, Exponential Distribution, Geometric Distribution and Normal Distribution. After compare with parameters and graphs of different distributions, we can find:
+The distribution of buyers and sellers are similiar.
+The estimate parameters of Normal Distribution are very close to the parameters of our token data, but the graphs don't fit well. 
+The graphs of Poisson Distribution and Weibull Distribution both fit our token data well, but for the parameters, the mean(buys:1331.66, sells:499.26) is not equal to variance(buys:133341824.3, sells:17815729.69), so it should not be Poisson Distribution.
+
+Hence, we finally conclude that **Weibull Distribution** fit our distribution best.
+
+### 5.2 Q2
+The number of layers is 15. We tried several features of token data : (1) number of transactions(best correlation is 0.193) (2)Number of Unique buyers per day(best correlation is 0.14943) (3)Percentage of investors who have bought more than 10 tokens(best correlation is 0.1347)
+
+Hence, the best correlation is 0.4943, when feature of token data is number of unique buyers per day.
+
+### 5.3 Q3
 For most active buyers, we tried 5 distributions: Poisson Distribution, Weibull Distribution, Exponential Distribution, Geometric Distribution, Normal Distribution.We also use ks-test to check which distribution fit our data best. After compare with parameters, graphs and p-value of different distributions, we can find: we get a bigest p-value = 0.3659 while fiting normal distribution, **normal distribution** fit our data best.
 From above results and plot, we can find that the most active seller in our token (seller 6253227) only bought our token, cannot find purchase record in other tokens, so the distribution is just a line between Jul 2017 and Jan 2018, unable to fit any distribution.
 
-
-
+### 5.4 Q4
 
