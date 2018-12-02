@@ -1,8 +1,7 @@
 ---
-title: "CS6313.002 Statistical Project 1 - Part 1"
+title: "CS6313.002 Statistical Project"
 author: "Ruolan Zeng(rxz171630), Vineet Vilas Amonkar(vva180000)"
 date: "Nov 30 2018"
-github: 
 output:
   pdf_document: default
   html_document: default
@@ -10,6 +9,9 @@ output:
 
 ## Abstract 
 The aim of the project is to implement different statistical methods on the Storj Token transaction data.The results of the methods are analyzed to derive inferences about the token data.In 4.1, we found how many times a user buys or sells the STORJ token, then fit a distribution and estimate the best distribution.In 4.2, we find the correlation between the STORJ Token price data and layer features of the STORJ Token.In 4.3, we find the most active buyer and seller of our STORJ token and then track them in all other tokens, plot how many unique tokens have they invested in the provided time frame then fit and estimate distributions as part 1. In 4.4, we created  a multiple linear regression model to explain price return on day t. 
+
+**source code:** https://github.com/vineetamonkar/r_project_2/blob/master/StatFinalReport.Rmd
+
 
 ## 1. Introduction:
 
@@ -93,7 +95,6 @@ Price dataset for storj token it contains 379 rows and 7 columns as follows:
  (g) Market Cap: Market Cap of that token on that day
  We use price data in part 2 and 4.
 
-
 ## 3. Preprocessing
 
 There could be some records in the transactions where total amount is very large. Some of this records could be due to some bug or glitch(integer overflow problem). These values can be separated from data using a threshold value.
@@ -144,7 +145,7 @@ colnames(freqNoBuys) <- c("NoBuys","freqNoBuys")
 ```
 
 
-```{r}
+```{r fig.cap = "Fitting with Weibull Distribution-Buys"}
 # fit distribution
 
 # Poisson Distribution
@@ -176,7 +177,7 @@ colnames(freqNoSells) <- c("NoSells","freqNoSells")
 # barplot(freqNoSells$freqNoSells,names.arg = freqNoSells$NoSells,ylab = "Frequency of Number of Sellers", xlab = "Number of Sellers", xlim = c(0,20),ylim = c(0,50000))
 ```
 
-```{r echo=FALSE}
+```{r echo=FALSE, fig.cap = "Fitting with Weibull Distribution-Selles"}
 # fit distribution
 
 # Poisson Distribution
@@ -344,7 +345,7 @@ dateinterval2 <- c("Aug-17","Sep-17","Oct-17","Nov-17","Dec-17","Jan-18","Feb-18
 # barplot(countArray,names.arg = dateinterval2,ylab = "no of unique tokens", xlab = "month")
 ```
 
-```{r}
+```{r fig.cap = "Fitting with Normal Distribution - Most Active Buyer"}
 # fir distribution
 
 # 1.Exponential Distribution
@@ -576,7 +577,7 @@ Data preparation: univariate and bivariate analysis.
 
 Check for outliers and then remove them by capping our data to the max value.To remove majority of the outlier we are capping the data 92% quantile. Then we will alsocheck the response variable. 
 
-```{r echo =FALSE}
+```{r echo =FALSE, fig.cap = "Boxplots of variables for Univariate analysis in simple regression"}
 par(mfrow = c(1,3))
 bx = boxplot(newsimpletable$no_of_trans,ylim = c(0,5000),main = "with outlier",ylab ="no of trans" )
 
@@ -621,7 +622,7 @@ From the summary of the linear model we can clearly see that it is not a good mo
 
 We can test this linear model using the plot function:
 
-```{r echo=FALSE ,warning=FALSE, error=FALSE, message=FALSE}
+```{r echo=FALSE ,warning=FALSE, error=FALSE, message=FALSE,fig.cap = "Residual Plot of the linear model"}
 library(lmtest)
 par(mfrow = c(2,2))
 plot(final_data)
@@ -701,7 +702,7 @@ Now that we have all the required features lets do the analysis as we did for th
 
 Create a boxplot of unique buys regressor variable and then we check for the number of tokens(and capping at 94%) and percentage of investors variable:
 
-```{r echo = FALSE}
+```{r echo = FALSE,fig.cap = "Boxplot if variables for univariate analysis in multiple regression"}
 par(mfrow=c(2,3))
 bx = boxplot(newsimpletable$unique_buyers, main ="with outlier",ylab ="no of buyers")
 #quantile(newsimpletable$unique_buyers, seq(0,1,0.02))
@@ -727,7 +728,7 @@ boxplot(newsimpletable$percentage_investors,main="without outliers", ylab="% of 
  plot unique buyers vs return:  
  plot percentage investors vs return:  
  
-```{r echo=FALSE}
+```{r echo=FALSE, fig.cap = "Scatter plot of variables for Bivariate analysis in multiple regression"}
 par(mfrow=c(2,2))
 plot(newsimpletable$total_token,newsimpletable$return,xlab ="no of tokens",ylab ="simple return")
 plot(newsimpletable$no_of_trans,newsimpletable$return,xlab ="no of trans",ylab ="simple return")
@@ -759,7 +760,7 @@ vif(final_data6)
 ```
 
 Finally, Check the summary and plot of our final data model:
-```{r echo=FALSE}
+```{r echo=FALSE,fig.cap = "Residual plot of the linear model for multiple regression"}
 #anothernewsimpletable <- merge(priceData,freqtrans,by = "Date")
 #summary(anothernewsimpletable)
 #anothernewsimpletable<- anothernewsimpletable[,c(-6,-7)]
